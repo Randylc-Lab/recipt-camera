@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>發票管家</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang TC',sans-serif;background:#f5f5f0;color:#1a1a1a;min-height:100vh;padding-bottom:80px}
+.header{background:#fff;padding:16px 20px 12px;border-bottom:0.5px solid rgba(0,0,0,0.12);position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:600;letter-spacing:-0.3px}
+.header p{font-size:13px;color:#666;margin-top:2px}
+.tabs{display:flex;background:#fff;border-bottom:0.5px solid rgba(0,0,0,0.12);position:sticky;top:64px;z-index:99}
+.tab{flex:1;padding:10px 4px;font-size:13px;font-weight:500;color:#666;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s}
+.tab.active{color:#D85A30;border-bottom-color:#D85A30}
+.section{padding:16px;display:none}
+.section.active{display:block}
+.card{background:#fff;border-radius:14px;border:0.5px solid rgba(0,0,0,0.1);padding:16px;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:500;color:#666;margin-bottom:12px}
+label{display:block;font-size:13px;color:#666;margin-bottom:4px}
+input,select{width:100%;padding:10px 12px;border:0.5px solid rgba(0,0,0,0.2);border-radius:10px;font-size:15px;background:#f8f8f8;color:#1a1a1a;outline:none;font-family:inherit;-webkit-appearance:none}
+input:focus{border-color:#D85A30;background:#fff}
+.field-row{margin-bottom:12px}
+.field-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.btn{width:100%;padding:13px;border-radius:12px;border:none;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.btn-primary{background:#D85A30;color:#fff}
+.btn-primary:active{transform:scale(0.98);background:#c04f26}
+.btn-secondary{background:#f0f0f0;color:#1a1a1a;border:0.5px solid rgba(0,0,0,0.15)}
+.btn-secondary:active{transform:scale(0.98)}
+.qr-area{border:1.5px dashed rgba(0,0,0,0.2);border-radius:14px;overflow:hidden;background:#111;position:relative;width:100%;height:0;padding-bottom:100%;display:block}
+.qr-area-inner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.qr-area.scanning{border-color:#D85A30;border-style:solid}
+#qrVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+#qrCanvas{position:absolute;inset:0;width:100%;height:100%;display:none;object-fit:cover}
+.qr-placeholder{text-align:center;padding:24px}
+.qr-placeholder p{font-size:14px;color:#aaa;margin-top:8px}
+.qr-placeholder small{font-size:12px;color:#777;display:block;margin-top:4px}
+.scan-overlay{position:absolute;inset:0;pointer-events:none;display:none}
+.scan-line{position:absolute;left:10%;right:10%;height:2px;background:linear-gradient(90deg,transparent,#D85A30,transparent);top:20%;animation:scanMove 1.8s ease-in-out infinite}
+@keyframes scanMove{0%,100%{top:20%}50%{top:75%}}
+.corner{position:absolute;width:24px;height:24px;border-color:#D85A30;border-style:solid}
+.corner.tl{top:10px;left:10px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+.corner.tr{top:10px;right:10px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+.corner.bl{bottom:10px;left:10px;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+.corner.br{bottom:10px;right:10px;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+#fileInput{display:none}
+.qr-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.result-card{background:#EAF3DE;border:0.5px solid rgba(59,109,17,0.25);border-radius:12px;padding:12px 14px;margin-top:12px;display:none}
+.result-card.error{background:#FCEBEB;border-color:rgba(163,45,45,0.25)}
+.result-card .rc-title{font-size:12px;color:#3B6D11;margin-bottom:8px;font-weight:600}
+.result-card.error .rc-title{color:#A32D2D}
+.result-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.result-field{background:#fff;border-radius:8px;padding:8px 10px}
+.result-field span{display:block;font-size:11px;color:#666}
+.result-field strong{display:block;font-size:14px;font-weight:600;margin-top:2px;word-break:break-all}
+.result-field.wide{grid-column:span 2}
+.month-header{font-size:13px;font-weight:600;color:#666;padding:12px 0 6px}
+.receipt-item{background:#fff;border-radius:12px;border:0.5px solid rgba(0,0,0,0.1);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.receipt-dot{width:8px;height:8px;border-radius:50%;background:#D85A30;flex-shrink:0}
+.receipt-info{flex:1;min-width:0}
+.receipt-title{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.receipt-sub{font-size:12px;color:#666;margin-top:2px}
+.receipt-amount{font-size:16px;font-weight:600;color:#D85A30;white-space:nowrap}
+.month-summary{background:#FAECE7;border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.month-summary span{font-size:13px;color:#993C1D}
+.month-summary strong{font-size:15px;font-weight:600;color:#993C1D}
+.empty-state{text-align:center;padding:48px 20px;color:#999}
+.empty-state p{font-size:15px;margin-bottom:4px}
+.empty-state small{font-size:13px}
+.delete-btn{padding:6px 10px;border:none;background:#FCEBEB;color:#A32D2D;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500}
+.filter-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{white-space:nowrap;padding:6px 14px;border-radius:20px;font-size:13px;border:0.5px solid rgba(0,0,0,0.2);background:#fff;color:#666;cursor:pointer;font-family:inherit;flex-shrink:0}
+.filter-chip.active{background:#D85A30;color:#fff;border-color:#D85A30}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat-card{background:#f8f8f5;border-radius:12px;padding:14px;text-align:center}
+.stat-val{font-size:22px;font-weight:600;color:#D85A30}
+.stat-label{font-size:12px;color:#666;margin-top:2px}
+.export-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.export-card{background:#fff;border-radius:14px;border:0.5px solid rgba(0,0,0,0.1);padding:16px;text-align:center;cursor:pointer;transition:all 0.15s}
+.export-card:active{transform:scale(0.97)}
+.export-icon{font-size:28px;margin-bottom:8px}
+.export-card p{font-size:14px;font-weight:500;margin-bottom:4px}
+.export-card small{font-size:12px;color:#666}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧾 發票管家</h1>
+  <p>掃描 QR Code 自動讀取台灣統一發票</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('add')">掃描新增</button>
+  <button class="tab" onclick="switchTab('list')">記錄列表</button>
+  <button class="tab" onclick="switchTab('stats')">統計匯出</button>
+</div>
+
+<!-- 掃描新增 -->
+<div id="tab-add" class="section active">
+  <div class="card">
+    <div class="card-title">📷 掃描發票左側 QR Code</div>
+    <div class="qr-area" id="qrArea">
+      <video id="qrVideo" playsinline muted autoplay webkit-playsinline></video>
+      <canvas id="qrCanvas"></canvas>
+      <div class="scan-overlay" id="scanOverlay">
+        <div class="scan-line"></div>
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+      </div>
+      <div class="qr-placeholder" id="qrPlaceholder">
+        <div style="font-size:48px">⬛</div>
+        <p>點擊下方按鈕開啟相機</p>
+        <small>請對準發票左方二維條碼</small>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" onchange="scanFromFile(this)">
+    <div class="qr-btns">
+      <button class="btn btn-primary" id="camBtn" onclick="toggleCamera()">📷 開啟相機掃描</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">🖼 從相簿選取</button>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <div class="rc-title" id="rcTitle">✅ 發票識別成功</div>
+      <div class="result-fields">
+        <div class="result-field"><span>發票號碼</span><strong id="r_invoiceNo">—</strong></div>
+        <div class="result-field"><span>開立日期</span><strong id="r_date">—</strong></div>
+        <div class="result-field"><span>未稅金額</span><strong id="r_sales">—</strong></div>
+        <div class="result-field"><span>含稅總額</span><strong id="r_total">—</strong></div>
+        <div class="result-field wide"><span>賣方統編</span><strong id="r_seller">—</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✏️ 補充資訊</div>
+    <div class="field-row-2">
+      <div>
+        <label>日期（自動帶入）</label>
+        <input type="date" id="receiptDate">
+      </div>
+      <div>
+        <label>含稅金額（自動帶入）</label>
+        <input type="number" id="receiptAmount" placeholder="金額" inputmode="numeric">
+      </div>
+    </div>
+    <div class="field-row-2">
+      <div>
+        <label>人名</label>
+        <input type="text" id="receiptPerson" placeholder="例：小明">
+      </div>
+      <div>
+        <label>人數</label>
+        <input type="number" id="receiptCount" value="1" min="1" inputmode="numeric">
+      </div>
+    </div>
+    <div class="field-row">
+      <label>備註（選填）</label>
+      <input type="text" id="receiptNote" placeholder="例：午餐、客戶接待...">
+    </div>
+    <button class="btn btn-primary" onclick="saveReceipt()">💾 儲存發票記錄</button>
+  </div>
+</div>
+
+<!-- 記錄列表 -->
+<div id="tab-list" class="section">
+  <div class="filter-row" id="monthFilters"></div>
+  <div id="receiptList"></div>
+</div>
+
+<!-- 統計匯出 -->
+<div id="tab-stats" class="section">
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="card">
+    <div class="card-title">📤 匯出資料</div>
+    <div class="export-grid">
+      <div class="export-card" onclick="exportExcel()">
+        <div class="export-icon">📊</div>
+        <p>Excel 匯出</p>
+        <small>.xlsx 格式</small>
+      </div>
+      <div class="export-card" onclick="exportCSV()">
+        <div class="export-icon">📄</div>
+        <p>CSV 匯出</p>
+        <small>通用格式</small>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📅 月份統計</div>
+    <div id="monthStats"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'tw_receipts_qr_v1';
+let scanning = false;
+let videoStream = null;
+let scanInterval = null;
+let currentFilter = 'all';
+
+function getReceipts() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } }
+function saveReceipts(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+document.getElementById('receiptDate').value = today();
+
+function showToast(msg, dur=2400) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  ['add','list','stats'].forEach((t, i) => { if (t === tab) document.querySelectorAll('.tab')[i].classList.add('active'); });
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab !== 'add') stopCamera();
+  if (tab === 'list') renderList();
+  if (tab === 'stats') renderStats();
+}
+
+/* ──────────────────────────────────
+   QR Code 解析：台灣統一發票格式
+   前 77 碼固定欄位，後方以 : 分隔
+────────────────────────────────── */
+function parseInvoiceQR(raw) {
+  if (!raw || raw.length < 77) return null;
+
+  const invoiceNo  = raw.slice(0, 10);   // 發票字軌號碼
+  const rocDate    = raw.slice(10, 17);  // 民國年月日 7碼
+  const randomCode = raw.slice(17, 21);  // 隨機碼
+  const salesHex   = raw.slice(21, 29);  // 未稅金額 hex 8碼
+  const totalHex   = raw.slice(29, 37);  // 含稅金額 hex 8碼
+  const buyerTax   = raw.slice(37, 45);  // 買方統編
+  const sellerTax  = raw.slice(45, 53);  // 賣方統編
+  // 53~77 = AES加密驗證 24碼
+
+  // 民國年 → 西元年
+  const rocYear = parseInt(rocDate.slice(0, 3));
+  const adYear  = rocYear + 1911;
+  const month   = rocDate.slice(3, 5);
+  const day     = rocDate.slice(5, 7);
+  const isoDate = `${adYear}-${month}-${day}`;
+
+  // hex → 十進位
+  const salesAmt = parseInt(salesHex, 16) || 0;
+  const totalAmt = parseInt(totalHex, 16) || 0;
+
+  // 延伸欄位（第77碼後，以 : 分隔）
+  const extraParts = raw.length > 77 ? raw.slice(77).split(':').filter(Boolean) : [];
+
+  return { invoiceNo, isoDate, randomCode, salesAmt, totalAmt, buyerTax, sellerTax, extraParts };
+}
+
+function fillFields(parsed) {
+  if (!parsed) return false;
+
+  // 日期與金額自動帶入
+  document.getElementById('receiptDate').value = parsed.isoDate;
+  document.getElementById('receiptAmount').value =
+    parsed.totalAmt > 0 ? parsed.totalAmt : (parsed.salesAmt > 0 ? parsed.salesAmt : '');
+
+  // 顯示識別結果卡片
+  const rc = document.getElementById('resultCard');
+  rc.style.display = 'block';
+  rc.className = 'result-card';
+  document.getElementById('rcTitle').textContent = '✅ 發票識別成功';
+  document.getElementById('r_invoiceNo').textContent = parsed.invoiceNo;
+  document.getElementById('r_date').textContent = parsed.isoDate;
+  document.getElementById('r_sales').textContent =
+    parsed.salesAmt > 0 ? `NT$ ${parsed.salesAmt.toLocaleString()}` : '未分離（00000000）';
+  document.getElementById('r_total').textContent =
+    parsed.totalAmt > 0 ? `NT$ ${parsed.totalAmt.toLocaleString()}` : '—';
+  document.getElementById('r_seller').textContent = parsed.sellerTax || '—';
+  return true;
+}
+
+function showQRError(msg) {
+  const rc = document.getElementById('resultCard');
+  rc.style.display = 'block';
+  rc.className = 'result-card error';
+  document.getElementById('rcTitle').textContent = '⚠️ ' + msg;
+  ['r_invoiceNo','r_date','r_sales','r_total','r_seller'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+/* ── 偵測環境 ── */
+const hasBarcodeDetector = ('BarcodeDetector' in window);
+let barcodeDetector = null;
+if (hasBarcodeDetector) {
+  try { barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] }); } catch(e) {}
+}
+
+/* ── 相機掃描 ── */
+async function toggleCamera() {
+  if (scanning) { stopCamera(); return; }
+  const btn = document.getElementById('camBtn');
+  btn.textContent = '⏳ 啟動中...';
+  btn.disabled = true;
+  try {
+    // iOS 需要 exact facingMode 或先嘗試 environment
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 1280 }
+      }
+    };
+    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('qrVideo');
+    video.srcObject = videoStream;
+    // iOS Safari 需要先 play() 才會有畫面
+    await video.play().catch(() => {});
+    video.style.display = 'block';
+    document.getElementById('qrPlaceholder').style.display = 'none';
+    document.getElementById('scanOverlay').style.display = 'block';
+    document.getElementById('qrArea').classList.add('scanning');
+    btn.textContent = '⏹ 停止掃描';
+    btn.style.background = '#666';
+    btn.disabled = false;
+    scanning = true;
+    rafLoop();
+  } catch (e) {
+    btn.textContent = '📷 開啟相機掃描';
+    btn.style.background = '';
+    btn.disabled = false;
+    showToast('⚠️ 無法開啟相機，請改用「從相簿選取」');
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+  if (scanInterval) { cancelAnimationFrame(scanInterval); scanInterval = null; }
+  const video = document.getElementById('qrVideo');
+  video.pause(); video.srcObject = null; video.style.display = 'none';
+  document.getElementById('qrPlaceholder').style.display = 'block';
+  document.getElementById('scanOverlay').style.display = 'none';
+  document.getElementById('qrArea').classList.remove('scanning');
+  const btn = document.getElementById('camBtn');
+  btn.textContent = '📷 開啟相機掃描';
+  btn.style.background = ''; btn.disabled = false;
+}
+
+let lastScanTime = 0;
+function rafLoop() {
+  if (!scanning) return;
+  scanInterval = requestAnimationFrame(async () => {
+    const now = Date.now();
+    // iOS 上每 400ms 掃一次，避免過熱
+    if (now - lastScanTime > 400) {
+      lastScanTime = now;
+      await tryScanVideo();
+    }
+    rafLoop();
+  });
+}
+
+async function tryScanVideo() {
+  const video = document.getElementById('qrVideo');
+  if (!video.videoWidth || video.readyState < 2) return;
+
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+
+  // 優先使用原生 BarcodeDetector (iOS 16+)
+  if (barcodeDetector) {
+    try {
+      const codes = await barcodeDetector.detect(video);
+      if (codes.length > 0) {
+        handleQRResult(codes[0].rawValue);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: jsQR via canvas
+  try {
+    const canvas = document.createElement('canvas');
+    // 縮小至最長邊 640，提升 jsQR 在 iOS 的速度
+    const maxDim = 640;
+    let cw = w, ch = h;
+    if (w > maxDim || h > maxDim) {
+      if (w >= h) { cw = maxDim; ch = Math.round(h * maxDim / w); }
+      else { ch = maxDim; cw = Math.round(w * maxDim / h); }
+    }
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, cw, ch);
+    const imgData = ctx.getImageData(0, 0, cw, ch);
+    const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+    if (code && code.data) handleQRResult(code.data);
+  } catch(e) {}
+}
+
+function handleQRResult(raw) {
+  stopCamera();
+  const parsed = parseInvoiceQR(raw);
+  if (parsed && parsed.invoiceNo) {
+    fillFields(parsed);
+    showToast('✅ 發票掃描成功！');
+  } else {
+    showQRError('非台灣統一發票 QR Code');
+    showToast('⚠️ 讀到 QR Code 但非發票格式');
+  }
+}
+
+/* ── 從圖片掃描 ── */
+async function scanFromFile(input) {
+  const file = input.files[0]; if (!file) return;
+  input.value = '';
+  showToast('🔍 分析圖片中...');
+
+  // 優先使用 BarcodeDetector
+  if (barcodeDetector) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const codes = await barcodeDetector.detect(bitmap);
+      bitmap.close();
+      if (codes.length > 0) {
+        handleQRResult(codes[0].rawValue);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: jsQR
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    // 多尺度掃描：原尺寸 → 縮至1200 → 縮至800，提升識別率
+    const scales = [
+      { maxDim: img.width },  // 原始尺寸
+      { maxDim: 1200 },
+      { maxDim: 800 }
+    ];
+    let found = false;
+    for (const { maxDim } of scales) {
+      if (found) break;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const imgData = ctx.getImageData(0, 0, w, h);
+      // 正向 + 反向都試
+      for (const inv of ['dontInvert', 'invertFirst']) {
+        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: inv });
+        if (code && code.data) {
+          found = true;
+          URL.revokeObjectURL(url);
+          handleQRResult(code.data);
+          break;
+        }
+      }
+    }
+    if (!found) {
+      URL.revokeObjectURL(url);
+      showToast('⚠️ 圖片中無法找到 QR Code，請確認圖片清晰');
+    }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); showToast('⚠️ 圖片讀取失敗'); };
+  img.src = url;
+}
+
+/* ── 儲存 ── */
+function saveReceipt() {
+  const date    = document.getElementById('receiptDate').value;
+  const amount  = parseFloat(document.getElementById('receiptAmount').value);
+  const person  = document.getElementById('receiptPerson').value.trim();
+  const count   = parseInt(document.getElementById('receiptCount').value) || 1;
+  const note    = document.getElementById('receiptNote').value.trim();
+
+  if (!date)              { showToast('⚠️ 請選擇日期'); return; }
+  if (!amount || amount <= 0) { showToast('⚠️ 請輸入正確金額'); return; }
+  if (!person)            { showToast('⚠️ 請輸入人名'); return; }
+
+  const receipts = getReceipts();
+  receipts.unshift({ id: Date.now(), date, amount, person, count, note, created: new Date().toISOString() });
+  saveReceipts(receipts);
+
+  document.getElementById('receiptAmount').value = '';
+  document.getElementById('receiptPerson').value = '';
+  document.getElementById('receiptCount').value = '1';
+  document.getElementById('receiptNote').value = '';
+  document.getElementById('receiptDate').value = today();
+  document.getElementById('resultCard').style.display = 'none';
+
+  showToast('✅ 發票記錄已儲存！');
+  switchTab('list');
+}
+
+/* ── 列表渲染 ── */
+function renderList() {
+  const receipts = getReceipts();
+  const months = ['全部', ...new Set(receipts.map(r => r.date.slice(0, 7)))].slice(0, 13);
+  document.getElementById('monthFilters').innerHTML = months.map(m =>
+    `<button class="filter-chip${currentFilter === m ? ' active' : ''}" onclick="setFilter('${m}')">${m === '全部' ? '全部' : m.replace('-', '/')}</button>`
+  ).join('');
+
+  const filtered = currentFilter === '全部' ? receipts : receipts.filter(r => r.date.startsWith(currentFilter));
+  const listEl = document.getElementById('receiptList');
+
+  if (!filtered.length) {
+    listEl.innerHTML = `<div class="empty-state"><p>尚無發票記錄</p><small>掃描 QR Code 開始記帳</small></div>`;
+    return;
+  }
+
+  const byMonth = {};
+  filtered.forEach(r => {
+    const m = r.date.slice(0, 7);
+    if (!byMonth[m]) byMonth[m] = [];
+    byMonth[m].push(r);
+  });
+
+  listEl.innerHTML = Object.keys(byMonth).sort((a, b) => b.localeCompare(a)).map(m => {
+    const items = byMonth[m];
+    const total = items.reduce((s, r) => s + r.amount, 0);
+    const [y, mo] = m.split('-');
+    return `
+      <div class="month-header">${y} 年 ${parseInt(mo)} 月</div>
+      <div class="month-summary"><span>${items.length} 筆記錄</span><strong>NT$ ${total.toLocaleString()}</strong></div>
+      ${items.map(r => `
+        <div class="receipt-item">
+          <div class="receipt-dot"></div>
+          <div class="receipt-info">
+            <div class="receipt-title">${r.person}（${r.count}人）${r.note ? ' · ' + r.note : ''}</div>
+            <div class="receipt-sub">${r.date}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="receipt-amount">$${r.amount.toLocaleString()}</div>
+            <button class="delete-btn" onclick="deleteReceipt(${r.id})">刪除</button>
+          </div>
+        </div>`).join('')}`;
+  }).join('');
+}
+
+function setFilter(m) { currentFilter = m; renderList(); }
+
+function deleteReceipt(id) {
+  if (!confirm('確定要刪除這筆記錄嗎？')) return;
+  saveReceipts(getReceipts().filter(r => r.id !== id));
+  renderList();
+  showToast('已刪除記錄');
+}
+
+/* ── 統計 ── */
+function renderStats() {
+  const receipts = getReceipts();
+  const total = receipts.reduce((s, r) => s + r.amount, 0);
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const monthTotal = receipts.filter(r => r.date.startsWith(thisMonth)).reduce((s, r) => s + r.amount, 0);
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${receipts.length}</div><div class="stat-label">總發票數</div></div>
+    <div class="stat-card"><div class="stat-val">$${(total / 1000).toFixed(1)}K</div><div class="stat-label">總金額</div></div>
+    <div class="stat-card"><div class="stat-val">$${monthTotal.toLocaleString()}</div><div class="stat-label">本月金額</div></div>
+    <div class="stat-card"><div class="stat-val">${receipts.length ? Math.round(total / receipts.length).toLocaleString() : 0}</div><div class="stat-label">平均金額</div></div>`;
+
+  const byMonth = {};
+  receipts.forEach(r => {
+    const m = r.date.slice(0, 7);
+    if (!byMonth[m]) byMonth[m] = { count: 0, total: 0 };
+    byMonth[m].count++; byMonth[m].total += r.amount;
+  });
+
+  document.getElementById('monthStats').innerHTML = !Object.keys(byMonth).length
+    ? '<div style="text-align:center;color:#999;padding:24px">尚無記錄</div>'
+    : Object.keys(byMonth).sort((a, b) => b.localeCompare(a)).map(m => {
+        const [y, mo] = m.split('-');
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+          <div><span style="font-size:14px;font-weight:500">${y}/${mo}</span><span style="font-size:12px;color:#666;margin-left:8px">${byMonth[m].count} 筆</span></div>
+          <span style="font-size:15px;font-weight:600;color:#D85A30">NT$ ${byMonth[m].total.toLocaleString()}</span></div>`;
+      }).join('');
+}
+
+/* ── 匯出 ── */
+function fmtDate(d) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-');
+  return `${y.slice(2)}/${m}/${day}`;
+}
+
+function exportExcel() {
+  const receipts = getReceipts();
+  if (!receipts.length) { showToast('⚠️ 沒有資料可匯出'); return; }
+  const rows = [['時間', '內容', '金額']];
+  receipts.forEach(r => rows.push([fmtDate(r.date), `${r.person}（${r.count}人）${r.note ? '_' + r.note : ''}`, r.amount]));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws, '發票記錄');
+  XLSX.writeFile(wb, `發票記錄_${today()}.xlsx`);
+  showToast('✅ Excel 已匯出');
+}
+
+function exportCSV() {
+  const receipts = getReceipts();
+  if (!receipts.length) { showToast('⚠️ 沒有資料可匯出'); return; }
+  const rows = [['時間', '內容', '金額']];
+  receipts.forEach(r => rows.push([fmtDate(r.date), `${r.person}（${r.count}人）${r.note ? '_' + r.note : ''}`, r.amount]));
+  const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `發票記錄_${today()}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ CSV 已匯出');
+}
+</script>
+</body>
+</html>
