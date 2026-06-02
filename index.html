@@ -482,6 +482,25 @@ async function scanFromFile(input) {
   img.src = url;
 }
 
+// 初始化並啟動後置鏡頭掃描
+Html5Qrcode.getCameras().then(devices => {
+    if (devices && devices.length) {
+        var cameraId = devices[0].id;
+        const html5QrCode = new Html5Qrcode(/* 你的 div id */);
+        html5QrCode.start(
+            cameraId, 
+            { fps: 10, qrbox: 250 },
+            (decodedText, decodedResult) => {
+                // 成功解析後的動作
+                console.log(`掃描結果: ${decodedText}`);
+            },
+            (errorMessage) => {
+                // 解析錯誤/掃描中
+            }
+        );
+    }
+}).catch(err => { console.log(err); });
+
 /* ── 儲存 ── */
 function saveReceipt() {
   const date    = document.getElementById('receiptDate').value;
