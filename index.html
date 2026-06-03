@@ -315,7 +315,7 @@ async function initQRCodeScanner() {
       disableFlip: false,
       formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
       videoConstraints: {
-        facingMode: 'environment',
+        facingMode: { exact: 'environment' },
         width: { ideal: 1280 },
         height: { ideal: 1280 }
       }
@@ -475,7 +475,7 @@ function renderList() {
         <div class="receipt-item">
           <div class="receipt-dot"></div>
           <div class="receipt-info">
-            <div class="receipt-title">${r.person}（${r.count}人）${r.note ? ' · ' + r.note : ''}</div>
+            <div class="receipt-title">${fmtContent(r)}</div>
             <div class="receipt-sub">${r.date}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
@@ -532,14 +532,20 @@ function fmtDate(d) {
   return `${y.slice(2)}/${m}/${day}`;
 }
 
+function fmtContent(r) {
+  let content = r.person + '共' + r.count + '人';
+  if (r.note) content = r.note + ' ' + content;
+  return content;
+}
+
 function exportExcel() {
   const receipts = getReceipts();
   if (!receipts.length) { showToast('⚠️ 沒有資料可匯出'); return; }
   const rows = [['時間', '內容', '金額']];
-  receipts.forEach(r => rows.push([fmtDate(r.date), `${r.person}（${r.count}人）${r.note ? '_' + r.note : ''}`, r.amount]));
+  receipts.forEach(r => rows.push([fmtDate(r.date), fmtContent(r), r.amount]));
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws, '發票記錄');
   XLSX.writeFile(wb, `發票記錄_${today()}.xlsx`);
   showToast('✅ Excel 已匯出');
@@ -549,7 +555,7 @@ function exportCSV() {
   const receipts = getReceipts();
   if (!receipts.length) { showToast('⚠️ 沒有資料可匯出'); return; }
   const rows = [['時間', '內容', '金額']];
-  receipts.forEach(r => rows.push([fmtDate(r.date), `${r.person}（${r.count}人）${r.note ? '_' + r.note : ''}`, r.amount]));
+  receipts.forEach(r => rows.push([fmtDate(r.date), fmtContent(r), r.amount]));
   const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
